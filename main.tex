@@ -1,0 +1,47 @@
+\documentclass{article}
+\usepackage[final]{neurips_2019}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{subfigure}
+\usepackage{graphicx}
+
+\setcitestyle{square,numbers,comma,sort&compress}
+
+\usepackage[pagebackref=true,breaklinks=true,letterpaper=true,colorlinks,bookmarks=false,citecolor=blue]{hyperref}
+
+\title{Design Choices for Invertible Neural Networks}
+
+
+\author{%
+  Max Daniels \\
+  Northeastern University\\
+  \texttt{daniels.g@northeastern.edu} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Invertible neural networks are an alternative to Generative Adversarial Networks which permit generative modeling through maximum likelihood estimation of the network parameters. Theoretically, these networks are fully invertible, but in practice their inverse map may be numerically challenging to compute. We take a deep dive investigation of the GLOW network to find one cause of this instability. We then test various remedies and demonstrate two options which solve the problem with no harm to network training. Finally, we identify and analyze a coincidental design feature of the INN and draw comparisons to other GAN architectures.
+\end{abstract}
+
+\input{introduction.tex}
+
+
+\input{experiments.tex}
+
+\input{conclusion.tex}
+
+\small
+
+\nocite{karras2019analyzing}
+\bibliography{citations} 
+\bibliographystyle{plainnat}
+
+\end{document}

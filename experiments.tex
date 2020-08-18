@@ -1,0 +1,63 @@
+\section{Experiments}
+
+The GLOW architecture is organized in a series of flow steps, which are each individually invertible. In order to operate at multiple scales, the flow steps are connected by split and squeeze layers which manipulate the size and number of activation maps throughout the network. The flow steps are mainly responsible for image synthesis, by way of \textit{invertible 1x1 convolutions} as well as learned \textit{affine coupling layers}. We refer the reader to \cite{kingma2018glow} for more details.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figures/Glow.png}
+    \caption{A diagram of the GLOW architecture at multiple levels of granularity. Triangles indicate the points where intermediate activations enter and exit rows of the diagram. \textit{Row 1}: high level GLOW architecture. \textit{Row 2}: organization of an individual FLOW step. \textit{Row 3}: affine coupling uses a learned CNN to compute scale $s$ and bias $t$. Immediately following a SPLIT layer, $z_i$ is the input to CNN.}
+    \label{fig:glow_architecture}
+\end{figure}
+In Figure \ref{fig:glow_architecture} we show the global organization of a GLOW network, along with an expansion of one flow step and, inside of it, an affine coupling layer. To identify the failure, we treat the GLOW model philosophically as a generator and inspect intermediate activations beginning with input noise and ending with an output image. 
+
+Under this view, affine coupling plays a particularly important role. When noise is introduced into the INN in a split step, it is concatenated along the channel dimension as a contiguous block of noise activation maps. By coincidence, these noise channels are fed as input into the following affine coupling layer, which computes $s$ and $t$, the weights and biases for learned activation maps from the other channel block. The input noise is then forwarded to following layers with no transformation. From this analysis, we propose the following explanation for numerical instabilities:
+
+\begin{quote}
+Because affine coupling computes a divisor $s$, its output is required to be bounded away from zero. "Special" latent codes, such as those near the origin, are distribution shifted inputs which may induce outputs that violate this requirement.
+\end{quote}
+
+As an example, we study the first flow layer which receives noise input. As shown in Figure \ref{fig:sigma_plot}, as input noise concentrates around the origin, outliers of very low norm emerge.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/s_plots.png}
+    \caption{Empirical density functions of components of $s$ in the first FLOW layer which directly follows a SPLIT. As the input noise level is reduced, outliers emerge which cause large intermediate activations.}
+    \label{fig:sigma_plot}
+\end{figure}
+
+
+\subsection{Architectural Remedies}
+We consider four potential remedies to make affine coupling robust to distribution shifted input:
+\begin{enumerate}
+    \item Additive Coupling: this method, given in \cite{kingma2018glow}, simply fixes $s=1$. 
+    \item Biased Sigmoid: add bias to the net output so it is bounded away from zero.
+    \item Bounded Net: rather than biasing the output of the net, scale its output from $[0, 1]$ to $[a,b] \subseteq [0, 1]$.
+    \item Randomized Splits: as part of the training procedure, GLOW internal activations are encouraged to follow a unit Gaussian distribution. Training an INN with random permutations of intermediate activation channels, inserted before each flow step, allows both noise input and intermediate activations to be used as input to affine coupling. This reduces the impact of distribution shifted input by mixing it with unit Gaussian activations.
+\end{enumerate}
+
+We show in Figure \ref{fig:train_performance} a comparison of training loss for these modifications. Replicating the results of \cite{kingma2018glow}, additive coupling noticeably harms training compared to affine coupling. The Biased Sigmoid and Bounded Net architectures exhibit training performance which is somewhat faster than GLOW with standard affine coupling. Randomized splits behave similarly to affine coupling.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{figures/train_loss.png}
+    \caption{Average training loss every $30$ batches while training a GLOW architecture with various architectural modifications. The unmodified control architecture uses affine coupling.}
+    \label{fig:train_performance}
+\end{figure}
+
+After training, both the Biased Sigmoid and Bounded Net architectures have no sign of numerical instabilities. In contrast, the Randomized Splits architecture has significantly worse instability, as discussed in the following section.
+
+\subsection{Randomized Splits and the "Noise Path"}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/autoencode.png}
+    \caption{After training, it is easy to map an image to a latent code, but impossible to invert the map. Here we show clipping at $c=50$, but behavior is the same for $c \in \{10, 20, 30, 40, 100, 500, 1000\}$.}
+    \label{fig:autoencode}
+\end{figure}
+While it is easy to train a GLOW network with randomized splits, this architecture has significantly more instability. As shown in Figure \ref{fig:autoencode}, while the network architecture is capable of faithfully inverting images, as shown in the unlearned case, after learning it is impossible to sample even a partially uncorrupted image for a range of clipping parameters. Clearly, the allocation of noise to particular channels is crucial to the numerical stability of the inverse map, even if it bears little impact on training.
+
+
+It is surprising that channel perturbations at the input to each flow layer should have negative effects, as channel permutation is a basic operation of the related RealNVP architecture \cite{dinh2016nvp}. This operation is generalized by GLOW through invertible 1x1 convolutions -- \textit{any channel permutation can be learned by the 1x1 convolution of any flow layer}. The key difference is whether this permutation is applied before or after affine coupling.
+
+To speculate a cause for this, we highlight the similarity between affine coupling with concatenated noise input, and the AdaIN operation proposed for StyleGAN \cite{karras2018stylebased}. In both cases, noise is supplied to the network at multiple scales as input to a learned neural network which computes weights and biases of intermediate activations. In StyleGAN, these are the only source of stochastic input to the network, and they are responsible for controlling semantic characteristics of the output. 
+
+Conceivably, the concatenation of input noise to fixed channels may induce a "noise path" which propagates the latent information of the representation throughout the network. Such a noise path would be disrupted by randomized splits. The accuracy of this interpretation, and the true role of noise concatenation in GLOW, are interesting directions for future work. 
